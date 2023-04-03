@@ -3,42 +3,42 @@ version: "3.7"
 services:
   database:
     image: mysql:8.0
+    volumes:
+      - "./data/people_schema.sql:/docker-entrypoint-initdb.d/1.sql"
+      - "./data/places_schema.sql:/docker-entrypoint-initdb.d/2.sql"
     platform: linux/amd64
     command:
       - "--default-authentication-plugin=mysql_native_password"
-    environment:
-      - MYSQL_RANDOM_ROOT_PASSWORD=yes
-      - MYSQL_DATABASE=codetest
-      - MYSQL_USER=codetest
-      - MYSQL_PASSWORD=swordfish
     ports:
       - "3306:3306"
     restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 2s
+      retries: 20
+    env_file:
+      - database_credentials.env
 
-  example-c:
-    image: example-c
-    build: images/example-c
-    command: ["./example"]
+  data_ingestor:
+    image: data_ingestor
+    build: images/data_ingestor
+    command: ["./data_ingestor.py"]
     volumes:
       - ./data:/data
+    depends_on:
+      database:
+          condition: service_healthy
+    env_file:
+      - database_credentials.env
 
-  example-node:
-    image: example-node
-    build: images/example-node
-    command: ["./example.js"]
+  summary_generator:
+    image: summary_generator
+    build: images/summary_generator
+    command: ["./summary_generator.py"]
     volumes:
       - ./data:/data
-
-  example-python:
-    image: example-python
-    build: images/example-python
-    command: ["./example.py"]
-    volumes:
-      - ./data:/data
-
-  example-r:
-    image: example-r
-    build: images/example-r
-    command: ["./example.R"]
-    volumes:
-      - ./data:/data
+    depends_on:
+      data_ingestor:
+          condition: service_completed_successfully
+    env_file:
+      - database_credentials.env
